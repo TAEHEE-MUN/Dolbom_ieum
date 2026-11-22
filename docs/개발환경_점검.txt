@@ -1,0 +1,62 @@
+﻿[이전 환경 준비 기록입니다. 최신 상태는 구현상태_검증.txt 및 실행_DB_안내.txt를 참조하세요.]
+
+동행이음 개발환경 점검 | 2026-11-21
+
+[확인 완료]
+개발 경로: C:\Project\Dolbom_ieum
+원격 저장소: https://github.com/TAEHEE-MUN/Dolbom_ieum.git
+빈 저장소 복제 완료. 기능 코드 작성 없음.
+Git: 2.50.1.windows.1
+Flutter: 3.47.0 stable, C:\dev\flutter
+Dart: 3.13.0
+Android Studio: C:\Program Files\Android\Android Studio
+Android SDK: C:\Users\tea00hee\AppData\Local\Android\Sdk
+설치 플랫폼: android-34, android-35, android-36, android-37.0
+Build Tools: 36.0.0
+Flutter가 선택한 JDK: Android Studio 내장 OpenJDK 25.0.2
+VS Code 설치 경로 확인 완료.
+uv: 0.8.8 설치 확인. Python 실행기(py)에는 등록된 Python 없음.
+
+[아직 완료되지 않음]
+Python 버전/환경 관리 방식 확정, Python 설치 및 가상환경 구성.
+FastAPI/Jinja2/AI 패키지 설치 및 버전 잠금.
+Android SDK 일부 라이선스 동의.
+Android 실물 기기 또는 에뮬레이터 연결 확인.
+Flutter 프로젝트를 만들지 않았으므로 Gradle/JDK 실제 빌드 호환성 미검증.
+관리자 웹·앱의 실행 검증은 기능 코드 작성 단계에서 진행.
+
+[Android 약관 직접 확인 방법]
+PowerShell에서 flutter doctor --android-licenses 실행.
+표시되는 내용을 읽고 동의 여부를 직접 선택.
+이후 flutter doctor -v 실행하여 Android 항목 재확인.
+
+[현재 범위에 불필요]
+Windows 데스크톱 앱을 개발하지 않으므로 Visual Studio C++ 항목은 설치하지 않음.
+별도 React/Node 프런트엔드 서버 또는 Docker 구성 없음.
+
+[개인정보]
+실제 수급자 정보와 비밀키를 저장소에 올리지 않음.
+data/local, .env, 로컬 DB와 서명키는 .gitignore에 제외 설정.
+
+[2026-11-21 서버 DB 변경]
+사용자 지정 서버 DB: Supabase PostgreSQL.
+프로젝트: imwyxesukjjvjnneaeif
+주소: https://imwyxesukjjvjnneaeif.supabase.co
+앱 오프라인 저장용 SQLite는 유지. 서버 SQLite 선정안은 대체.
+.env에 사용자 제공 URL/공개 키 저장. .env.example은 값 없는 공유 템플릿.
+아직 실행 코드가 없어 .env를 읽는 동작은 구현하지 않음.
+Supabase 연결 도구로 프로젝트 조회를 시도했으나 권한 부족 응답.
+따라서 기존 테이블/RLS/프로젝트 상태와 제공 키의 유효성은 검증하지 못함.
+테이블 생성, SQL 실행, 데이터 변경, Auth 설정 변경 없음.
+로그인에 Supabase Auth를 사용할지와 FastAPI의 DB 접근 방식은 미확정.
+공개 키는 DB 관리 권한이 아니며, 기관별 권한은 인증과 RLS 등 별도 설계가 필요.
+
+[2026-11-21 후속 설치 완료 — 앞선 미구성 상태를 대체]
+사용자 승인: uv 사용, 호환 버전 선정·고정, Flutter 3.47.0 유지.
+Python 3.13.18 / uv 0.13.9 / .venv / pyproject.toml / uv.lock 구성 완료.
+FastAPI/Jinja2/AI/Supabase 패키지 설치, 충돌 검사 및 import 통과.
+Supabase Auth 사용 확정. 사용자에 따르면 새 빈 DB.
+공개 키 Auth 설정 HTTP 200 확인. REST 루트는 secret key 요구로 401.
+테이블 읽기/쓰기 검증이나 관리 권한 검증은 완료되지 않음.
+Android 약관 직접 동의 및 실기기 연결, 앱 빌드 검증은 여전히 미완료.
+상세 버전과 재현 명령: 개발환경_사용안내.md 참조.

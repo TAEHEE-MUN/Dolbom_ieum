@@ -1,0 +1,45 @@
+﻿# Local environments and secrets
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/ephemeral/
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+# Local data, logs and operating system files
+data/local/*
+!data/local/.gitkeep
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.log
+.DS_Store
+Thumbs.db
+# Development-only tooling and device configuration
+**/node_modules/
+apps/mobile/config/development.json
+.idea/
+*.iml

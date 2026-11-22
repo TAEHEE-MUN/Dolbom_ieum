@@ -1,0 +1,30 @@
+[project]
+name = "dolbom-ieum"
+version = "0.1.0"
+description = "Donghaeng Ieum visit records and review prototype"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi==0.165.0",
+    "httpx==0.28.1",
+    "jinja2==3.1.6",
+    "numpy==2.5.5",
+    "pandas==3.1.1",
+    "python-dotenv==1.2.4",
+    "scikit-learn==1.9.1",
+    "supabase==2.34.1",
+    "uvicorn==0.54.0",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pglast==8.9",
+    "pytest==9.2.0",
+    "pytest-asyncio==1.5.0",
+]
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

@@ -1,0 +1,18 @@
+﻿동행이음 인증·보호 경로 | 2026-11-21
+
+로그인: /login (기존 / 주소도 로그인 화면 제공)
+관리자 페이지: /admin
+인증 없음·만료: /login으로 이동.
+유효한 로그인이나 관리자 소속 없음: 403.
+관리자 여부: Supabase Auth /user 검증 후 DB memberships의 활성 소속·role로 확인.
+관리자 감사 API /api/audit에도 서버 권한 검사 적용.
+모바일 /api/bootstrap은 가입·기관 연결 대기에도 필요하므로 로그인 사용자에게 제공하며 RLS로 행 범위 제한.
+기타 API는 사용자 JWT와 DB의 기관·소유자·역할 검사를 사용.
+쿠키 쓰기 요청에는 CSRF 검증. 잘못된 Authorization 헤더로 쿠키 인증의 CSRF 검사를 우회할 수 없도록 거절.
+문자 인증 성공 후 /admin으로 이동. 실제 SMS 제공업체 설정은 요청대로 보류.
+
+검증: 전체 Python 테스트 13개 통과. 미로그인, 만료 토큰, 지원사 관리자 경로 접근, 정상 관리자, CSRF 누락·비정상 헤더·다른 출처 요청 검사 포함.
+검증의 Auth 응답은 모의 응답이며 실제 Supabase 통합 인증을 완료했다는 뜻이 아님.
+원격 프로젝트 관리 접근은 여전히 권한 오류. DB 및 Phone Auth 원격 설정은 미완료.
+
+공식 참고: https://supabase.com/docs/guides/auth/server-side/creating-a-client
