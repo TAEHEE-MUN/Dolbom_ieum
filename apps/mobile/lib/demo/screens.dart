@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'components.dart';
 import 'model.dart';
@@ -14,15 +15,30 @@ class _DemoScreenBodyState extends State<DemoScreenBody> {
   DemoModel get m => widget.model;
   String get frame => frameIds[m.screen]!;
   final phone = TextEditingController(), password = TextEditingController();
-  final memo = TextEditingController(), reason = TextEditingController();
+  final memo = TextEditingController();
+  final reason = TextEditingController(text: '추가 내부 공간 정리 관리 업무 시행');
+  final startHour = TextEditingController(text: '09'),
+      startMinute = TextEditingController(text: '00');
+  final endHour = TextEditingController(text: '13'),
+      endMinute = TextEditingController(text: '20');
   late final time = TextEditingController(
     text: m.screen == DemoScreen.correction ? '종료 13:20' : '09:30 ~ 14:00',
   );
-  String activity = '병원 동행', answer = '병원 진료를 위해 함께 이동했어요';
+  String activity = '병원 동행', answer = '장보기를 원해 하나로마트에 함께 갔습니다.';
   String? error;
   @override
   void dispose() {
-    for (final c in [phone, password, memo, reason, time]) {
+    for (final c in [
+      phone,
+      password,
+      memo,
+      reason,
+      time,
+      startHour,
+      startMinute,
+      endHour,
+      endMinute,
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -759,6 +775,53 @@ class _DemoScreenBodyState extends State<DemoScreenBody> {
     AppButton('기록 보러가기', () => m.go(DemoScreen.records, root: true)),
   ]);
 
+  Widget correctionTime(
+    String label,
+    String original,
+    TextEditingController hour,
+    TextEditingController minute,
+    String key,
+  ) {
+    Widget number(TextEditingController controller, String unit) => SizedBox(
+      width: 64,
+      child: TextField(
+        key: ValueKey('$key-$unit'),
+        controller: controller,
+        keyboardType: TextInputType.number,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(2),
+        ],
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+        decoration: InputDecoration(
+          labelText: unit,
+          semanticCounterText: '$label $unit',
+          border: const OutlineInputBorder(),
+        ),
+      ),
+    );
+    return AppCard(
+      padding: 16,
+      radius: 14,
+      child: col([
+        txt(label, size: 18, weight: FontWeight.w800),
+        gap(6),
+        txt('원래 값 $original · 승인 전까지 유지', size: 13, color: AppColors.muted),
+        gap(16),
+        Row(
+          children: [
+            number(hour, '시'),
+            const SizedBox(width: 10),
+            txt(':', size: 24),
+            const SizedBox(width: 10),
+            number(minute, '분'),
+          ],
+        ),
+      ]),
+    );
+  }
+
   Widget change() {
     final correction = m.screen == DemoScreen.correction;
     return col([
@@ -772,42 +835,47 @@ class _DemoScreenBodyState extends State<DemoScreenBody> {
       gap(18),
       txt('요청할 시간  필수', weight: FontWeight.w700),
       gap(12),
-      AppCard(
-        padding: 16,
-        radius: 14,
-        child: Row(
-          children: [
-            Expanded(
-              child: col([
-                txt('원래 값 · 변경되지 않음', size: 12, color: AppColors.muted),
-                txt(
-                  correction ? '종료 13:30' : '09:00 ~ 13:30',
-                  weight: FontWeight.w700,
-                ),
-              ]),
-            ),
-            icon('imgIcon1'),
-            const SizedBox(width: 10),
-            Expanded(
-              child: col([
-                txt('요청할 값', size: 12, color: AppColors.muted),
-                TextField(
-                  controller: time,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+      if (correction) ...[
+        correctionTime('시작 시간', '09:00', startHour, startMinute, 'start'),
+        gap(12),
+        correctionTime('종료 시간', '13:30', endHour, endMinute, 'end'),
+      ] else
+        AppCard(
+          padding: 16,
+          radius: 14,
+          child: Row(
+            children: [
+              Expanded(
+                child: col([
+                  txt('원래 값 · 변경되지 않음', size: 12, color: AppColors.muted),
+                  txt(
+                    correction ? '종료 13:30' : '09:00 ~ 13:30',
+                    weight: FontWeight.w700,
                   ),
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 8),
+                ]),
+              ),
+              icon('imgIcon1'),
+              const SizedBox(width: 10),
+              Expanded(
+                child: col([
+                  txt('요청할 값', size: 12, color: AppColors.muted),
+                  TextField(
+                    controller: time,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(vertical: 8),
+                    ),
                   ),
-                ),
-              ]),
-            ),
-          ],
+                ]),
+              ),
+            ],
+          ),
         ),
-      ),
       gap(18),
       AppField(
         label: '요청 사유  필수',
@@ -823,8 +891,35 @@ class _DemoScreenBodyState extends State<DemoScreenBody> {
       ),
       gap(18),
       AppButton('요청 보내기', () {
-        if (reason.text.trim().isEmpty || time.text.trim().isEmpty) {
+        if (reason.text.trim().isEmpty ||
+            (!correction && time.text.trim().isEmpty)) {
           setState(() => error = '요청할 시간과 사유를 입력해주세요.');
+          return;
+        }
+        if (correction) {
+          final parts = [
+            startHour,
+            startMinute,
+            endHour,
+            endMinute,
+          ].map((c) => int.tryParse(c.text)).toList();
+          if (parts.any((n) => n == null) ||
+              parts[0]! > 23 ||
+              parts[2]! > 23 ||
+              parts[1]! > 59 ||
+              parts[3]! > 59 ||
+              parts[0]! * 60 + parts[1]! >= parts[2]! * 60 + parts[3]!) {
+            setState(() => error = '시작·종료 시간을 확인해주세요. 종료는 시작 이후여야 해요.');
+            return;
+          }
+          final values = parts
+              .map((n) => n.toString().padLeft(2, '0'))
+              .toList();
+          m.requestChange(
+            correction: true,
+            time: '시작 ${values[0]}:${values[1]} · 종료 ${values[2]}:${values[3]}',
+            reason: reason.text.trim(),
+          );
           return;
         }
         final pattern = RegExp(
@@ -980,7 +1075,7 @@ class _DemoScreenBodyState extends State<DemoScreenBody> {
             sent
                 ? (m.correctionSent
                       ? '홍길동님 · ${m.requestedTime}'
-                      : '홍길동님 · 종료 13:30 → 13:20')
+                      : '홍길동님 · 시작 09:00 · 종료 13:30 → 13:20')
                 : '홍길동님 · 3월 12일 11:30~13:30',
             size: 15,
             color: AppColors.muted,
@@ -1034,6 +1129,7 @@ class _DemoScreenBodyState extends State<DemoScreenBody> {
     gap(9),
     DropdownButtonFormField<String>(
       initialValue: answer,
+      itemHeight: null,
       isExpanded: true,
       icon: SizedBox(
         width: 20,
@@ -1046,14 +1142,24 @@ class _DemoScreenBodyState extends State<DemoScreenBody> {
         ),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       ),
-      items: ['병원 진료를 위해 함께 이동했어요', '장보기를 함께 했어요', '가사 지원을 했어요', '기타 활동을 했어요']
-          .map(
-            (s) => DropdownMenuItem(
-              value: s,
-              child: txt(s, weight: FontWeight.w700),
-            ),
-          )
-          .toList(),
+      items:
+          [
+                '장보기를 원해 하나로마트에 함께 갔습니다.',
+                '병원 진료를 위해 함께 이동했어요',
+                '장보기를 함께 했어요',
+                '가사 지원을 했어요',
+                '기타 활동을 했어요',
+              ]
+              .map(
+                (s) => DropdownMenuItem(
+                  value: s,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: txt(s, weight: FontWeight.w700),
+                  ),
+                ),
+              )
+              .toList(),
       onChanged: (s) => setState(() => answer = s!),
     ),
     gap(18),

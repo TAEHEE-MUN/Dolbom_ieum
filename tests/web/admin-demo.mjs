@@ -42,6 +42,7 @@ try {
  await page.getByRole('button',{name:'검색',exact:true}).click();
  assert.equal(await page.locator('tbody tr').count(),1);
  await page.getByRole('button',{name:'근거 확인'}).click();
+ await page.getByRole('heading',{name:'방문·확인 사건 상세'}).waitFor();
  assert.ok((await page.locator('h1').textContent()).includes('사건 상세'));
  assert.ok((await page.locator('main').textContent()).includes('위치 정확도 180~450m'));
  await page.goto(base+'#people');
@@ -66,6 +67,18 @@ try {
  await page.getByRole('combobox',{name:'활동지원사',exact:true}).selectOption('이정은');
  await page.getByRole('button',{name:'일정 저장'}).click();
  assert.equal(await page.locator('.appointment').count(),5);
+ await page.goto(base+'#visits');
+ await page.getByRole('combobox',{name:'지원사',exact:true}).selectOption('홍길동');
+ assert.equal(await page.locator('tbody tr').count(),1);
+ await page.getByRole('button',{name:'상세 보기',exact:true}).click();
+ await page.getByRole('heading',{name:'방문·확인 사건 상세'}).waitFor();
+ assert.ok((await page.locator('main').textContent()).includes('2026년 3월 12일 목요일'));
+ assert.ok((await page.locator('main').textContent()).includes('장보기를 원해 하나로마트에 함께 갔습니다.'));
+ await page.getByRole('button',{name:'관련 정정 요청 확인'}).click();
+ await page.locator('#comparison').waitFor();
+ assert.ok((await page.locator('#comparison').textContent()).includes('추가 내부 공간 정리 관리 업무 시행'));
+ assert.ok((await page.locator('.value-box').first().textContent()).includes('시작 09:00 · 종료 13:30'));
+ await page.screenshot({path:output+'/shared-correction.png',fullPage:true});
  assert.deepEqual(errors,[],'JavaScript errors');
  assert.deepEqual(failed,[],'Missing assets');
  assert.deepEqual(external,[],'Unexpected external requests');

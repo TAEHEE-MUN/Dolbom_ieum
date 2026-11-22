@@ -112,6 +112,8 @@ void main() {
     (tester) async {
       final model = DemoModel(screen: DemoScreen.correction);
       await open(tester, model);
+      await tester.enterText(find.byType(TextField).last, '');
+      await tester.ensureVisible(find.text('요청 보내기'));
       await tester.tap(find.text('요청 보내기'));
       await tester.pumpAndSettle();
       expect(model.correctionSent, isFalse);
@@ -121,7 +123,8 @@ void main() {
       await tester.tap(find.text('요청 보내기'));
       await tester.pumpAndSettle();
       expect(model.correctionSent, isTrue);
-      expect(model.requestedTime, '종료 13:20');
+      expect(model.requestedTime, '시작 09:00 · 종료 13:20');
+      expect(model.changeReason, '종료 버튼을 늦게 눌렀어요.');
       model.go(DemoScreen.recordDetail);
       await tester.pumpAndSettle();
       expect(find.text('13:30'), findsOneWidget);
