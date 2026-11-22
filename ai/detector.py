@@ -40,6 +40,8 @@ def analyze(visit, events, samples, history=(), config=None):
             a, b = parse_time(segment[-1]['observed_at']), parse_time(p['observed_at'])
             pause_between = any(a < parse_time(e['occurred_at']) <= b and e['kind'] in ('pause','end') for e in ordered_events)
             if (b-a).total_seconds() > cfg['gap_seconds'] or pause_between:
+                if not pause_between and (b-a).total_seconds() > cfg['gap_seconds']:
+                    add('collection_gap', 'quality', '돌봄 구간의 위치 수집 공백으로 해당 경로 판단을 보류합니다.', segment[-1]['observed_at'], p['observed_at'], {'gap_seconds': (b-a).total_seconds()})
                 segments.append(segment); segment = []
         segment.append(p)
     if segment: segments.append(segment)

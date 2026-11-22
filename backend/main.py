@@ -12,6 +12,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from backend.domain import summarize
+from backend.contracts import validate_command
+from backend.readmodels import effective_events
 from ai.detector import analyze, cross_visit_patterns
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,15 +82,6 @@ async def rows(token, table, **filters):
 async def command(token, action, payload):
     return await remote('POST','/rest/v1/rpc/app_command',token,{'action':action,'payload':payload})
 
-def effective_events(events, corrections):
-    effective=[dict(e) for e in events]
-    for correction in sorted(corrections,key=lambda c:c.get('decided_at') or ''):
-        if correction['status']=='approved' and correction['target']=='event':
-            for event in effective:
-                if event['id']==correction['event_id']:
-                    event['occurred_at']=correction['proposed']['occurred_at']
-    return effective
-
 @app.middleware('http')
 async def headers(request, call_next):
     origin=request.headers.get('origin')
@@ -156,7 +149,7 @@ async def bootstrap(request:Request):
             'invitations':await rows(token,'invitations',user_id=f"eq.{user['id']}",status='eq.pending')}
     result['agencies']=await rows(token,'agencies')
     if membership:
-        for name in ('recipients','schedules','schedule_requests','visits','cases','corrections'):
+        for name in ('recipients','assignments','schedules','schedule_requests','visits','cases','corrections'):
             result[name]=await rows(token,name)
         if membership[0]['role']=='admin':
             result['staff']=await rows(token,'profiles')
@@ -166,8 +159,12 @@ async def bootstrap(request:Request):
 @app.post('/api/command')
 async def execute(request:Request,body:Command):
     token,_=await identity(request)
-    if body.action not in {'profile','accept_invitation','invite','recipient','recipient_update','assign','schedule','schedule_update','schedule_request','decide_schedule','sync','note','correction','answer','question','close','decide'}:
+    if body.action not in {'profile','accept_invitation','invite','recipient','recipient_update','assign','schedule','schedule_update','schedule_request','decide_schedule','sync','note','correction','answer','question','review','close','decide'}:
         raise HTTPException(422,'지원하지 않는 작업입니다.')
+    try:
+        validate_command(body.action, body.payload)
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        raise HTTPException(422, f'입력 형식을 확인하세요: {exc}')
     if body.action=='sync' and (len(body.payload.get('events',[]))>500 or len(body.payload.get('locations',[]))>2000):
         raise HTTPException(413,'한 번에 전송할 기록 수를 초과했습니다.')
     return await command(token,body.action,body.payload)
@@ -181,11 +178,8 @@ async def detail(request:Request,visit_id:UUID):
     for name in ('visit_events','locations','notes','cases','corrections'):
         data[name]=await rows(token,name,visit_id=f'eq.{visit_id}')
     data['summary']=summarize(data['visit_events'])
-    effective=[dict(e) for e in data['visit_events']]
-    for correction in sorted(data['corrections'],key=lambda c:c.get('decided_at') or ''):
-        if correction['status']=='approved' and correction['target']=='event':
-            for e in effective:
-                if e['id']==correction['event_id']: e['occurred_at']=correction['proposed']['occurred_at']
+    effective=effective_events(data['visit_events'], data['corrections'])
+    data['effective_events']=effective
     try: data['effective_summary']=summarize(effective)
     except (ValueError,KeyError): data['effective_summary']={'error':'승인 정정의 시간 순서를 확인하세요.'}
     return data
@@ -236,3 +230,27 @@ async def batch_analysis(request:Request):
         candidates.extend({'visit_id':v['id'],**x} for x in analyze(v,ve,vp,history))
     for candidate in candidates:await command(token,'candidate',candidate)
     return {'processed':len(visits),'candidates':len(candidates),'validated_accuracy':None}
+
+
+class AdminLogin(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=1024)
+
+@app.post('/auth/admin/login')
+async def admin_login(request: Request, body: AdminLogin):
+    session = await remote('POST', '/auth/v1/token?grant_type=password', data={'email': body.email.strip(), 'password': body.password})
+    token = session.get('access_token')
+    user = session.get('user', {})
+    if not token or not user.get('id'):
+        raise HTTPException(401, '로그인 응답을 확인할 수 없습니다.')
+    members = await rows(token, 'memberships', user_id=f"eq.{user['id']}", active='eq.true')
+    if not members or members[0]['role'] != 'admin':
+        raise HTTPException(403, '기관에 등록된 관리자 계정이 필요합니다.')
+    response = JSONResponse({'ok': True, 'role': 'admin'})
+    secure = request.url.scheme == 'https'
+    response.set_cookie('access_token', token, httponly=True, secure=secure, samesite='strict', max_age=session.get('expires_in',3600))
+    response.set_cookie('csrf', secrets.token_urlsafe(24), secure=secure, samesite='strict', max_age=session.get('expires_in',3600))
+    return response
+
+from backend.screen_api import router as screen_router
+app.include_router(screen_router)

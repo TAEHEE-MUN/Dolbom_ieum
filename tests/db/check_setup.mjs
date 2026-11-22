@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 const db=new PGlite();
 try {
  await db.exec(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE SCHEMA auth;
- CREATE TABLE auth.users(id uuid primary key, phone text);
+ CREATE TABLE auth.users(id uuid primary key, phone text, email text);
  CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS 'SELECT NULL::uuid';`);
  await db.exec(readFileSync('db/setup_all.sql','utf8').replace(/^\uFEFF/,''));
  const result=await db.query("SELECT count(*)::int AS tables, bool_and(rowsecurity) AS all_rls FROM pg_tables WHERE schemaname='public'");

@@ -1,0 +1,73 @@
+import {chromium} from 'playwright';
+import assert from 'node:assert/strict';
+import {mkdirSync} from 'node:fs';
+const base='http://127.0.0.1:5175/';
+const output=new URL('../../data/local/admin-review/',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1');
+mkdirSync(output,{recursive:true});
+const browser=await chromium.launch({channel:'chrome',headless:true});
+const page=await browser.newPage({viewport:{width:1106,height:900}});
+const errors=[],external=[],failed=[];
+page.on('pageerror',e=>errors.push(e.message));
+page.on('request',r=>{if(!r.url().startsWith(base)&&!r.url().startsWith('data:'))external.push(r.url());});
+page.on('response',r=>{if(r.status()>=400)failed.push(`${r.status()} ${r.url()}`);});
+const routes=['login','overview','schedule','visits','cases','changes','people','quality','settings','detail','comparison'];
+try {
+ for(const route of routes){
+  await page.setViewportSize(route==='login'?{width:870,height:729}:{width:1106,height:900});
+  await page.goto(base+'#'+route);
+  await page.evaluate(()=>document.fonts.ready);
+  await page.locator('main h1').waitFor();
+  await page.locator('img').evaluateAll(imgs=>Promise.all(imgs.map(i=>i.decode())));
+  assert.equal(await page.locator('main').getAttribute('data-frame-id')!==null,true);
+  await page.screenshot({path:`${output}/${route}.png`,fullPage:true});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),route+' horizontal overflow');
+  if(route==='detail'){
+   await page.getByRole('button',{name:'검토 완료',exact:true}).scrollIntoViewIfNeeded();
+   assert.equal(await page.getByRole('button',{name:'검토 완료',exact:true}).isDisabled(),true);
+   await page.screenshot({path:`${output}/detail-bottom.png`});
+  }
+  await page.setViewportSize({width:390,height:844});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),route+' mobile overflow');
+  await page.screenshot({path:`${output}/${route}-mobile.png`,fullPage:true});
+ }
+ await page.setViewportSize({width:1106,height:900});
+ await page.goto(base+'#login');
+ await page.getByRole('button',{name:'로그인',exact:true}).click();
+ await page.getByRole('heading',{name:'오늘의 활동 기록'}).waitFor();
+ await page.locator('nav').getByRole('link',{name:'방문 기록'}).click();
+ await page.getByRole('combobox',{name:'지원사',exact:true}).selectOption('박선영');
+ assert.equal(await page.locator('tbody tr').count(),2);
+ await page.locator('nav').getByRole('link',{name:'검토 항목'}).click();
+ await page.getByRole('combobox',{name:'출처',exact:true}).selectOption('데이터 품질');
+ await page.getByRole('button',{name:'검색',exact:true}).click();
+ assert.equal(await page.locator('tbody tr').count(),1);
+ await page.getByRole('button',{name:'근거 확인'}).click();
+ assert.ok((await page.locator('h1').textContent()).includes('사건 상세'));
+ assert.ok((await page.locator('main').textContent()).includes('위치 정확도 180~450m'));
+ await page.goto(base+'#people');
+ await page.getByRole('textbox',{name:'활동지원사 이름 검색'}).fill('박선영');
+ assert.equal(await page.locator('tbody tr').count(),1);
+ await page.getByRole('button',{name:/시연 설정/}).click();
+ await page.getByRole('combobox',{name:'사건',exact:true}).selectOption('C-0612-104');
+ await page.getByRole('textbox',{name:'가상 지원사 답변'}).fill('방문 종료 버튼을 늦게 눌렀습니다.');
+ await page.getByRole('button',{name:'가상 답변 반영'}).click();
+ await page.getByRole('textbox',{name:'기관 답변',exact:true}).fill('지원사 설명과 방문 기록을 대조했습니다.');
+ await page.getByRole('combobox',{name:'검토 결과',exact:true}).selectOption('기록 정정 확인');
+ await page.getByRole('button',{name:'검토 완료',exact:true}).click();
+ assert.ok((await page.locator('.metadata').textContent()).includes('검토 완료'));
+ await page.goto(base+'#changes');
+ await page.getByRole('button',{name:'비교 보기'}).first().click();
+ await page.getByRole('button',{name:'승인',exact:true}).click();
+ await page.getByRole('button',{name:'승인 확정'}).click();
+ assert.ok((await page.locator('.value-box').first().textContent()).includes('종료 13:50'));
+ assert.ok((await page.locator('.value-box').last().textContent()).includes('정정본 적용'));
+ await page.goto(base+'#schedule');
+ await page.getByRole('button',{name:'일정 등록'}).click();
+ await page.getByRole('combobox',{name:'활동지원사',exact:true}).selectOption('이정은');
+ await page.getByRole('button',{name:'일정 저장'}).click();
+ assert.equal(await page.locator('.appointment').count(),5);
+ assert.deepEqual(errors,[],'JavaScript errors');
+ assert.deepEqual(failed,[],'Missing assets');
+ assert.deepEqual(external,[],'Unexpected external requests');
+ console.log('PASS: 11 frames, desktop/mobile scrolling and layout, local assets, navigation, filters, staff search, reply/review, correction approval/original preservation, schedule registration; no API/external network requests.');
+} finally {await browser.close();}

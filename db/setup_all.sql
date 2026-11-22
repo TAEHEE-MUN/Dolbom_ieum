@@ -1,4 +1,4 @@
-﻿-- 동행이음 최초 DB 구축: 지정된 빈 Supabase 프로젝트에서 1회 실행
+-- 동행이음 최초 DB 구축: 지정된 빈 Supabase 프로젝트에서 1회 실행
 -- 테이블·RLS·RPC·운영자 등록 함수를 하나의 트랜잭션으로 생성합니다.
 -- 기존 동일 이름 테이블이 있으면 오류로 전체 롤백됩니다. 삭제 명령은 없습니다.
 -- Reviewable initial schema. Apply once to the designated EMPTY Supabase project.
@@ -131,6 +131,10 @@ begin
  elsif action='schedule_request' and not admin then
    select * into s from public.schedules where schedules.id=(payload->>'schedule_id')::uuid and agency_id=a and worker_id=u;
    if s.id is null or length(trim(coalesce(payload->>'reason','')))=0 then raise exception '배정 일정과 사유를 확인하세요.'; end if;
+   if exists(select 1 from public.schedule_requests x where x.id=(payload->>'id')::uuid and
+     (x.schedule_id<>s.id or x.requester_id<>u or x.proposed is distinct from payload->'proposed' or x.reason is distinct from payload->>'reason')) then
+     raise exception '같은 요청 ID의 내용이 다릅니다.';
+   end if;
    insert into public.schedule_requests(id,schedule_id,requester_id,proposed,reason) values((payload->>'id')::uuid,s.id,u,payload->'proposed',payload->>'reason') on conflict do nothing;
    result:='{"ok":true}'; target_id:=s.id;
  elsif action='decide_schedule' and admin then
@@ -188,8 +192,8 @@ begin
      insert into public.locations(id,visit_id,observed_at,lat,lon,accuracy) values((e->>'id')::uuid,target_id,stamp,(e->>'lat')::float8,(e->>'lon')::float8,(e->>'accuracy')::float8) on conflict do nothing;
    end loop;
    update public.visits set state=v.state,last_received_at=now(),version=version+1 where visits.id=target_id returning to_jsonb(visits.*) into result;
- elsif action in ('note','correction','answer','question','close','decide','candidate') then
-   if action in ('answer','question','close') then
+ elsif action in ('note','correction','answer','question','review','close','decide','candidate') then
+   if action in ('answer','question','review','close') then
      select * into c from public.cases where cases.id=(payload->>'id')::uuid for update;
      target_id:=c.visit_id;
    elsif action='decide' then
@@ -204,6 +208,10 @@ begin
    elsif action='correction' and not admin then
      if length(trim(coalesce(payload->>'reason','')))=0 then raise exception '사유가 필요합니다.'; end if;
      if payload->>'target'='event' and not exists(select 1 from public.visit_events where visit_id=target_id and visit_events.id=(payload->>'event_id')::uuid) then raise exception '원본 이벤트 확인 필요'; end if;
+     if exists(select 1 from public.corrections x where x.id=(payload->>'id')::uuid and
+       (x.visit_id<>target_id or x.requester_id<>u or x.target is distinct from payload->>'target'
+        or x.event_id is distinct from (payload->>'event_id')::uuid or x.proposed is distinct from payload->'proposed'
+        or x.reason is distinct from payload->>'reason')) then raise exception '같은 요청 ID의 내용이 다릅니다.'; end if;
      insert into public.corrections(id,visit_id,requester_id,target,event_id,proposed,reason) values((payload->>'id')::uuid,target_id,u,payload->>'target',(payload->>'event_id')::uuid,payload->'proposed',payload->>'reason') on conflict do nothing;
    elsif action='candidate' and admin then
      insert into public.cases(visit_id,code,category,reason,evidence,start_at,end_at,rule_version)
@@ -216,6 +224,11 @@ begin
      if c.status in ('agency_pending','complete') and c.worker_answer=payload->>'body' then return '{"ok":true}'; end if;
      if c.status<>'worker_pending' or c.version is distinct from (payload->>'version')::int or length(trim(coalesce(payload->>'body','')))=0 then raise exception '답변 대상/내용을 확인하세요.'; end if;
      update public.cases set worker_answer=payload->>'body',status='agency_pending',version=version+1 where cases.id=c.id;
+   elsif action='review' and admin then
+     if c.version is distinct from (payload->>'version')::int or c.status<>'agency_pending'
+       or length(trim(coalesce(payload->>'body','')))=0 then raise exception '지원사 답변과 최신 검토 상태를 확인하세요.'; end if;
+     snapshot:=to_jsonb(c);
+     update public.cases set agency_answer=payload->>'body',result='needs_followup',version=version+1 where cases.id=c.id;
    elsif action='close' and admin then
      if c.version is distinct from (payload->>'version')::int or c.status<>'agency_pending' or c.worker_answer is null or length(trim(coalesce(payload->>'body','')))=0
        or coalesce(payload->>'result','') not in ('explained','corrected') or exists(select 1 from public.corrections where visit_id=target_id and status='pending') then raise exception '지원사 답변·기관 답변·정정 처리 완료가 필요합니다.'; end if;
@@ -276,3 +289,21 @@ revoke all on function private.provision_agency(text,text,text) from public,anon
 commit;
 
 select tablename, rowsecurity from pg_tables where schemaname='public' order by tablename;
+
+-- Operator only: create the confirmed email/password user in Supabase Auth first.
+create or replace function private.provision_agency_email(agency_name text, admin_email text, admin_name text)
+returns uuid language plpgsql security invoker set search_path='' as $$
+declare uid uuid; aid uuid;
+begin
+ if length(trim(coalesce(agency_name,'')))=0 or length(trim(coalesce(admin_name,'')))=0 then
+   raise exception '기관명과 관리자 이름이 필요합니다.';
+ end if;
+ select id into uid from auth.users where lower(email)=lower(trim(admin_email));
+ if uid is null then raise exception '먼저 Supabase Auth에 관리자 이메일 계정을 등록하세요.'; end if;
+ if exists(select 1 from public.memberships where user_id=uid and active) then raise exception '이미 소속 기관이 있습니다.'; end if;
+ insert into public.profiles(id,name) values(uid,admin_name) on conflict(id) do nothing;
+ insert into public.agencies(name) values(agency_name) returning id into aid;
+ insert into public.memberships(agency_id,user_id,role) values(aid,uid,'admin');
+ return aid;
+end $$;
+revoke all on function private.provision_agency_email(text,text,text) from public,anon,authenticated;
